@@ -1,3 +1,6 @@
+import JSZip from './jszip.js';
+import { generateEpub } from './epubGenerator.js';
+
 // Globale Variablen
 let currentDownload = null;
 let cancelRequested = false;
@@ -46,7 +49,7 @@ async function startDownload(url, downloadId, initialSendResponse) {
       throw new Error('Keine Kapitel gefunden');
     }
 
-    sendProgress(5, `Gefunden: ${chapterUrls.length} Kapitel`, { message: `Kapitel: ${chapterUrls.length}`, type: 'info' });
+    sendProgress(5, `Gefunden: ${chapterUrls.length} Kapitel`, { message: `Kapitel gefunden: ${chapterUrls.length}`, type: 'info' });
 
     // Lade alle Kapitel herunter
     const chapters = [];
@@ -66,22 +69,22 @@ async function startDownload(url, downloadId, initialSendResponse) {
       chapters.push({ title, content, url: chapterUrl });
     }
 
-    // Erstelle die PDF-Datei (als HTML)
-    sendProgress(80, 'Erstelle PDF-Datei...', { message: 'PDF wird generiert', type: 'info' });
-    const filename = `${sanitizeFilename(storyTitle)}.html`;
-    const htmlContent = createHtmlContent(storyId, storyTitle, chapters);
+    // Erstelle das EPUB Buch für Apple Books
+    sendProgress(85, 'Erstelle EPUB-Buch für Apple Books...', { message: 'EPUB3-Archiv wird generiert & optimiert', type: 'info' });
+    const filename = `${sanitizeFilename(storyTitle)}.epub`;
     
-    // Konvertiere HTML zu Base64
-    const encoder = new TextEncoder();
-    const htmlBytes = encoder.encode(htmlContent);
-    const base64Data = arrayBufferToBase64(htmlBytes);
+    const epubBytes = await generateEpub(JSZip, storyId, storyTitle, chapters);
+    const base64Data = arrayBufferToBase64(epubBytes);
 
-    sendProgress(100, 'Fertig!', { message: `PDF bereit: ${filename}`, type: 'success' });
+    sendProgress(100, 'EPUB bereit!', { message: `EPUB Buch fertig: ${filename}`, type: 'success' });
     chrome.runtime.sendMessage({
       action: 'downloadComplete',
       success: true,
       filename: filename,
-      data: base64Data
+      data: base64Data,
+      mimeType: 'application/epub+zip',
+      storyTitle: storyTitle,
+      chaptersCount: chapters.length
     });
 
   } catch (error) {
@@ -112,12 +115,17 @@ function parseUrl(url) {
     const urlObj = new URL(url);
     const pathParts = urlObj.pathname.split('/').filter(part => part);
 
-    if (pathParts.length < 3 || pathParts[0] !== 's') {
+    if (pathParts.length < 2 || pathParts[0] !== 's') {
       return { storyId: null, storyTitle: null };
     }
 
     const storyId = pathParts[1];
-    const storyTitle = decodeURIComponent(pathParts[pathParts.length - 1]) || `Story_${storyId}`;
+    let storyTitle = 'Story_' + storyId;
+    if (pathParts.length >= 4) {
+      storyTitle = decodeURIComponent(pathParts[3]).replace(/_/g, ' ') || storyTitle;
+    } else if (pathParts.length === 3 && isNaN(Number(pathParts[2]))) {
+      storyTitle = decodeURIComponent(pathParts[2]).replace(/_/g, ' ') || storyTitle;
+    }
 
     return { storyId, storyTitle };
   } catch (error) {
@@ -149,9 +157,9 @@ async function getAllChapterUrls(storyId, storyTitle) {
       break;
     }
 
-    // Sicherheitsabbruch nach 100 Kapiteln
-    if (chapterNum > 100) {
-      sendProgress(0, 'Maximale Kapitelanzahl erreicht', { message: 'Abbruch nach 100 Kapiteln', type: 'warn' });
+    // Sicherheitsabbruch nach 250 Kapiteln
+    if (chapterNum > 250) {
+      sendProgress(0, 'Maximale Kapitelanzahl erreicht', { message: 'Abbruch nach 250 Kapiteln', type: 'warn' });
       break;
     }
   }
@@ -170,7 +178,7 @@ async function checkChapterExists(url) {
       target: { tabId: tab.id },
       func: () => {
         const errorMessage = document.querySelector('.panel_normal');
-        if (errorMessage && errorMessage.innerHTML.includes('Chapter not found')) {
+        if (errorMessage && (errorMessage.innerHTML.includes('Chapter not found') || errorMessage.innerHTML.includes('Story Not Found'))) {
           return false;
         }
 
@@ -181,11 +189,11 @@ async function checkChapterExists(url) {
           return true;
         }
 
-        if (document.title && !document.title.includes('Chapter not found')) {
+        if (document.title && !document.title.includes('Chapter not found') && !document.title.includes('Story Not Found')) {
           return true;
         }
 
-        return true;
+        return false;
       }
     });
 
@@ -270,79 +278,23 @@ async function extractChapterContent(url) {
   }
 }
 
-// Erstelle den HTML-Inhalt
-function createHtmlContent(storyId, storyTitle, chapters) {
-  const chapterHtml = chapters.map((chap, i) => {
-    const chapNum = i + 1;
-    const title = chap.title || `Chapter ${chapNum}`;
-    return `
-      <div style="page-break-before: always;">
-        <h1 style="text-align: center; font-size: 24px; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">${escapeHtml(title)}</h1>
-        <div style="font-size: 14px; line-height: 1.6; margin: 0 20px;">
-          ${chap.content}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${escapeHtml(storyTitle)}</title>
-  <style>
-    body {
-      font-family: Georgia, serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      color: #333;
-    }
-    h1 {
-      text-align: center;
-      font-size: 24px;
-      margin-bottom: 20px;
-    }
-    img {
-      max-width: 100%;
-      height: auto;
-    }
-    @media print {
-      body { font-size: 12pt; }
-      h1 { font-size: 18pt; }
-      div { page-break-inside: avoid; }
-    }
-  </style>
-</head>
-<body>
-  <h1>${escapeHtml(storyTitle)}</h1>
-  <p style="text-align: center; color: #666; margin-bottom: 30px;">
-    FanFiction.net Story (ID: ${storyId})<br>
-    <small>Generiert mit ff-downloader. Drucke diese Seite als PDF (Strg+P → Als PDF speichern).</small>
-  </p>
-  ${chapterHtml}
-</body>
-</html>
-  `;
-}
-
 // Hilfsfunktion: Konvertiere Uint8Array zu Base64
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let base64 = '';
-  for (let i = 0; i < bytes.length; i += 3) {
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 3) {
     const b1 = bytes[i] << 16 | bytes[i + 1] << 8 | bytes[i + 2];
     base64 += base64Chars[b1 >> 18 & 63] + base64Chars[b1 >> 12 & 63] + 
               base64Chars[b1 >> 6 & 63] + base64Chars[b1 & 63];
   }
-  const remainder = bytes.length % 3;
+  const remainder = len % 3;
   if (remainder > 0) {
-    const b1 = bytes[bytes.length - remainder];
+    const b1 = bytes[len - remainder];
     if (remainder === 1) {
       base64 += base64Chars[b1 >> 2] + base64Chars[(b1 & 3) << 4] + '==';
     } else {
-      const b2 = bytes[bytes.length - 2];
+      const b2 = bytes[len - 2];
       base64 += base64Chars[b2 >> 10] + base64Chars[(b2 & 15) << 2 | (b1 >> 6)] + 
                 base64Chars[b1 & 63] + '=';
     }
@@ -351,17 +303,6 @@ function arrayBufferToBase64(buffer) {
 }
 
 const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-// Hilfsfunktionen
-function escapeHtml(unsafe) {
-  if (!unsafe) return '';
-  return unsafe.toString()
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
 
 function sanitizeFilename(filename) {
   return filename

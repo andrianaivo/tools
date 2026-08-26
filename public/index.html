@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ff-downloader - FanFiction to EPUB (Apple Books)</title>
+  <link rel="stylesheet" href="/ff-downloader/popup/popup.css">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      width: 100%;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      color: #1e293b;
+    }
+    .app-header {
+      width: 100%;
+      max-width: 1040px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-title-box h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 4px 0;
+    }
+    .header-title-box p {
+      margin: 0;
+      font-size: 14px;
+      color: #64748b;
+    }
+    .app-layout {
+      width: 100%;
+      max-width: 1040px;
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 860px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    .extension-frame {
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+    }
+    .extension-header-bar {
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #475569;
+      font-weight: 600;
+    }
+    .extension-body {
+      padding: 20px;
+    }
+    .quick-samples {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px dashed #cbd5e1;
+    }
+    .quick-samples-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+    }
+    .sample-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #1e293b;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: all 0.15s ease;
+    }
+    .sample-btn:hover {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+    .preview-card {
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+      padding: 24px;
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+    }
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+    }
+    .preview-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .preview-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-action {
+      padding: 7px 14px;
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.15s ease;
+    }
+    .btn-action:hover {
+      background: #1d4ed8;
+    }
+    .book-preview-container {
+      width: 100%;
+      flex: 1;
+      min-height: 400px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #faf8f5;
+      padding: 24px;
+      overflow-y: auto;
+      font-family: Charter, Georgia, 'Palatino Linotype', serif;
+      line-height: 1.7;
+      color: #262626;
+    }
+    .book-preview-container h2 {
+      font-size: 22px;
+      text-align: center;
+      margin-bottom: 6px;
+      color: #111;
+    }
+    .book-preview-container .meta {
+      text-align: center;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 24px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .book-preview-container h3 {
+      font-size: 18px;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: #222;
+      border-bottom: 1px solid #eaeaea;
+      padding-bottom: 6px;
+    }
+    .book-preview-container p {
+      margin-bottom: 1em;
+      text-align: justify;
+    }
+    .apple-instructions-box {
+      margin-top: 18px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 12px;
+      color: #14532d;
+      line-height: 1.55;
+    }
+    .apple-instructions-box strong {
+      color: #0f172a;
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .apple-instructions-box ol {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .apple-instructions-box li {
+      margin-bottom: 4px;
+    }
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 8px 0 12px 0;
+      display: none;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #2563eb;
+      transition: width 0.2s ease;
+    }
+    .epub-badge {
+      background: #dcfce7;
+      color: #15803d;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-header">
+    <div class="header-title-box">
+      <h1>FanFiction.net → Apple Books EPUB Downloader</h1>
+      <p>Lädt vollständige Geschichten mit allen Kapiteln herunter und verpackt sie als EPUB 3 Buch für Apple Books.</p>
+    </div>
+    <span class="epub-badge">Apple Books Ready</span>
+  </div>
+
+  <div class="app-layout">
+    <!-- Chrome Extension Popup Simulator -->
+    <div class="extension-frame">
+      <div class="extension-header-bar">
+        <span>Chrome Extension Popup</span>
+        <span class="badge">v<span id="version">1.1.0</span></span>
+      </div>
+
+      <div class="extension-body">
+        <div class="container">
+          <div class="header-row">
+            <h1>ff-downloader</h1>
+            <span class="badge">EPUB 3</span>
+          </div>
+          <p class="subtitle">FanFiction.net → Apple Books</p>
+          <p class="version">Version: <span id="versionSub">1.1.0</span></p>
+
+          <div class="form-group">
+            <label for="storyUrl">FanFiction.net-URL:</label>
+            <input type="text" id="storyUrl" placeholder="https://www.fanfiction.net/s/12345/1/Story-Titel" value="https://www.fanfiction.net/s/14579114/4/The-Escrow-of-Blood">
+          </div>
+
+          <div class="progress-bar-container" id="progressBarContainer">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+
+          <button id="downloadBtn" class="primary-btn">
+            <span class="btn-icon">📚</span>
+            <span>EPUB Buch herunterladen</span>
+          </button>
+          <button id="cancelBtn" disabled class="secondary-btn">Abbrechen</button>
+          
+          <div id="status" class="status">Bereit zum Download</div>
+          
+          <div class="log-container">
+            <div id="log" class="log">
+              <div class="log-entry info">ff-downloader v1.1.0 bereit. EPUB3-Generator für Apple Books aktiv.</div>
+            </div>
+          </div>
+
+          <div class="apple-books-hint">
+            <span>📖</span>
+            <span>Erstellt ein vollwertiges EPUB3-Buch mit Inhaltsverzeichnis für die <strong>Apple Books</strong> App.</span>
+          </div>
+
+          <!-- Quick Test Samples -->
+          <div class="quick-samples">
+            <div class="quick-samples-title">Beispiel-Stories zum Testen:</div>
+            <button class="sample-btn" type="button" onclick="loadSample('https://www.fanfiction.net/s/14579114/4/The-Escrow-of-Blood')">
+              📖 <strong>The Escrow of Blood</strong> (4 Kapitel)
+            </button>
+            <button class="sample-btn" type="button" onclick="loadSample('https://www.fanfiction.net/s/6959397/7/Rescued')">
+              📖 <strong>Rescued</strong> (4 Kapitel)
+            </button>
+            <button class="sample-btn" type="button" onclick="loadSample('https://www.fanfiction.net/s/12345/1/Echoes_of_the_Past')">
+              📖 <strong>Echoes of the Past</strong> (2 Kapitel)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Document & Preview Panel -->
+    <div class="preview-card">
+      <div class="preview-header">
+        <h2 class="preview-title" id="previewHeading">
+          <span>📖</span>
+          <span>Buchvorschau &amp; EPUB-Export</span>
+        </h2>
+        <div class="preview-actions">
+          <button id="saveEpubBtn" class="btn-action" style="display:none;" onclick="saveCurrentEpub()">
+            📥 .EPUB Buch herunterladen
+          </button>
+        </div>
+      </div>
+
+      <div id="bookPreview" class="book-preview-container">
+        <div style="text-align:center; padding: 60px 20px; color:#64748b;">
+          <h3 style="border:none; color:#475569;">Kein Buch geladen</h3>
+          <p>Gib im linken Fenster eine FanFiction.net URL ein (oder wähle ein Test-Beispiel) und klicke auf <strong>"EPUB Buch herunterladen"</strong>.</p>
+        </div>
+      </div>
+
+      <div class="apple-instructions-box">
+        <strong>🍎 So öffnest du das Buch in Apple Books (iPhone / iPad / Mac):</strong>
+        <ol>
+          <li>Lade die <strong>.epub</strong> Datei herunter.</li>
+          <li><strong>Auf dem Mac:</strong> Doppelklicke auf die <code>.epub</code> Datei – sie öffnet sich sofort in Apple Books.</li>
+          <li><strong>Auf iPhone / iPad:</strong> Sende die Datei via <strong>AirDrop</strong> an dein iPhone/iPad oder speichere sie in <em>iCloud Drive</em> / <em>Dateien</em> und tippe darauf, um sie in Apple Books zu importieren.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // DOM Elements
+    const downloadBtn = document.getElementById('downloadBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const storyUrlInput = document.getElementById('storyUrl');
+    const statusElement = document.getElementById('status');
+    const logElement = document.getElementById('log');
+    const versionElement = document.getElementById('version');
+    const versionSubElement = document.getElementById('versionSub');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const progressBarFill = document.getElementById('progressBarFill');
+    const bookPreview = document.getElementById('bookPreview');
+    const previewHeading = document.getElementById('previewHeading');
+    const saveEpubBtn = document.getElementById('saveEpubBtn');
+
+    let currentDownloadId = null;
+    let eventSource = null;
+    let lastGeneratedData = null;
+    let lastFilename = 'story.epub';
+
+    // Load version from manifest
+    fetch('/manifest.json')
+      .then(res => res.json())
+      .then(manifest => {
+        if (manifest.version) {
+          versionElement.textContent = manifest.version;
+          versionSubElement.textContent = manifest.version;
+        }
+      })
+      .catch(() => {});
+
+    function loadSample(url) {
+      storyUrlInput.value = url;
+      logMessage(`Beispiel-URL geladen: ${url}`, 'info');
+      showStatus('Beispiel-URL ausgewählt', 'info');
+    }
+
+    // Event Listeners
+    downloadBtn.addEventListener('click', startDownload);
+    cancelBtn.addEventListener('click', cancelDownload);
+
+    async function startDownload() {
+      const url = storyUrlInput.value.trim();
+
+      if (!url) {
+        showStatus('Bitte gib eine URL ein.', 'error');
+        logMessage('Fehler: Keine URL angegeben', 'error');
+        return;
+      }
+
+      if (!url.includes('fanfiction.net')) {
+        showStatus('Bitte gib eine gültige FanFiction.net-URL ein.', 'error');
+        logMessage('Fehler: Ungültige URL (muss fanfiction.net enthalten)', 'error');
+        return;
+      }
+
+      // Reset UI
+      resetUI();
+      showStatus('Starte EPUB-Download...', 'info');
+      logMessage(`Download gestartet für: ${url}`, 'info');
+      
+      downloadBtn.disabled = true;
+      cancelBtn.disabled = false;
+      progressBarContainer.style.display = 'block';
+      progressBarFill.style.width = '0%';
+
+      try {
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Fehler beim Starten des Downloads');
+        }
+
+        currentDownloadId = data.downloadId;
+        listenToProgress(currentDownloadId);
+
+      } catch (error) {
+        showStatus('Fehler: ' + error.message, 'error');
+        logMessage(`Fehler: ${error.message}`, 'error');
+        downloadBtn.disabled = false;
+        cancelBtn.disabled = true;
+        progressBarContainer.style.display = 'none';
+      }
+    }
+
+    function listenToProgress(downloadId) {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource(`/api/progress/${downloadId}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+
+          if (payload.action === 'updateProgress') {
+            updateProgress(payload.progress, payload.message, payload.logEntry);
+          } else if (payload.action === 'downloadComplete') {
+            if (payload.success && payload.data) {
+              lastGeneratedData = payload.data;
+              lastFilename = payload.filename || 'story.epub';
+              
+              // Render book preview
+              renderBookPreview(payload.storyTitle, payload.storyId, payload.chapters || []);
+              saveEpubBtn.style.display = 'inline-flex';
+
+              startFileDownload(lastFilename, payload.data);
+            } else {
+              downloadComplete(payload.success, payload.message || 'Fehler beim Download');
+            }
+            if (eventSource) eventSource.close();
+          } else if (payload.action === 'downloadCancelled') {
+            downloadCancelled();
+            if (eventSource) eventSource.close();
+          }
+        } catch (e) {
+          console.error('Error parsing SSE message', e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+        }
+      };
+    }
+
+    function renderBookPreview(title, storyId, chapters) {
+      previewHeading.innerHTML = `<span>📖</span><span>Buch: ${escapeHtml(title)}</span>`;
+      
+      let html = `
+        <h2>${escapeHtml(title)}</h2>
+        <div class="meta">
+          <strong>FanFiction.net Story ID:</strong> ${escapeHtml(storyId)} &bull; 
+          <strong>Kapitel:</strong> ${chapters.length} &bull; 
+          <strong>Format:</strong> EPUB 3 (Apple Books)
+        </div>
+      `;
+
+      if (chapters.length > 0) {
+        chapters.forEach((chap, idx) => {
+          html += `
+            <h3>${escapeHtml(chap.title || 'Kapitel ' + (idx + 1))}</h3>
+            <div style="color:#333; margin-bottom: 20px;">
+              ${chap.content}
+            </div>
+          `;
+        });
+      }
+
+      bookPreview.innerHTML = html;
+    }
+
+    async function cancelDownload() {
+      if (currentDownloadId) {
+        try {
+          await fetch('/api/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ downloadId: currentDownloadId })
+          });
+          showStatus('Abbruch angefordert...', 'info');
+          logMessage('Download wird abgebrochen...', 'info');
+        } catch (e) {}
+      }
+    }
+
+    function startFileDownload(filename, base64Data) {
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/epub+zip' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+
+      downloadComplete(true, `EPUB Buch heruntergeladen: ${filename}`);
+    }
+
+    function saveCurrentEpub() {
+      if (lastGeneratedData) {
+        startFileDownload(lastFilename, lastGeneratedData);
+      }
+    }
+
+    function updateProgress(progress, message, logEntry) {
+      if (message) {
+        showStatus(message, 'info');
+      }
+      if (progress !== undefined && progress !== null) {
+        progressBarFill.style.width = `${progress}%`;
+      }
+      if (logEntry) {
+        logMessage(logEntry.message, logEntry.type);
+      }
+    }
+
+    function downloadComplete(success, message) {
+      currentDownloadId = null;
+      downloadBtn.disabled = false;
+      cancelBtn.disabled = true;
+
+      if (success) {
+        showStatus(message, 'success');
+        logMessage(message, 'success');
+        progressBarFill.style.width = '100%';
+      } else {
+        showStatus(message, 'error');
+        logMessage(message, 'error');
+      }
+    }
+
+    function downloadCancelled() {
+      currentDownloadId = null;
+      downloadBtn.disabled = false;
+      cancelBtn.disabled = true;
+      showStatus('Download abgebrochen.', 'error');
+      logMessage('Download abgebrochen.', 'error');
+    }
+
+    function showStatus(message, type = 'info') {
+      statusElement.textContent = message;
+      statusElement.className = 'status ' + type;
+    }
+
+    function logMessage(message, type = 'debug') {
+      const logEntry = document.createElement('div');
+      logEntry.className = `log-entry ${type}`;
+      logEntry.textContent = message;
+      logElement.appendChild(logEntry);
+      logElement.scrollTop = logElement.scrollHeight;
+
+      while (logElement.children.length > 60) {
+        logElement.removeChild(logElement.firstChild);
+      }
+    }
+
+    function resetUI() {
+      statusElement.textContent = '';
+      statusElement.className = 'status';
+      logElement.innerHTML = '';
+    }
+
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return unsafe.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>

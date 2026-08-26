@@ -1,0 +1,6 @@
+{
+  "name": "FF Downloader",
+  "description": "Chrome extension and web application for downloading FanFiction.net stories as formatted PDF/HTML documents with multi-chapter discovery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

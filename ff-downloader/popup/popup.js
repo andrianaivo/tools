@@ -10,40 +10,48 @@ const logElement = document.getElementById('log');
 const versionElement = document.getElementById('version');
 
 // Lade die Version aus dem manifest.json
-fetch(chrome.runtime.getURL('manifest.json'))
-  .then(response => response.json())
-  .then(manifest => {
-    versionElement.textContent = manifest.version;
-  })
-  .catch(() => {
-    versionElement.textContent = 'Unknown';
-  });
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+  fetch(chrome.runtime.getURL('manifest.json'))
+    .then(response => response.json())
+    .then(manifest => {
+      if (manifest.version) {
+        versionElement.textContent = manifest.version;
+      }
+    })
+    .catch(() => {
+      versionElement.textContent = '1.1.0';
+    });
 
-// Lade die aktuelle Tab-URL als Standard
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-  if (tabs[0] && tabs[0].url.includes('fanfiction.net')) {
-    storyUrlInput.value = tabs[0].url;
+  // Lade die aktuelle Tab-URL als Standard
+  if (chrome.tabs && chrome.tabs.query) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0] && tabs[0].url && tabs[0].url.includes('fanfiction.net')) {
+        storyUrlInput.value = tabs[0].url;
+      }
+    });
   }
-});
+
+  // Höre auf Nachrichten vom Background-Script
+  if (chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((request) => {
+      if (request.action === 'updateProgress') {
+        updateProgress(request.progress, request.message, request.logEntry);
+      } else if (request.action === 'downloadComplete') {
+        if (request.success && request.data) {
+          startFileDownload(request.filename, request.data, request.mimeType || 'application/epub+zip');
+        } else {
+          downloadComplete(request.success, request.message);
+        }
+      } else if (request.action === 'downloadCancelled') {
+        downloadCancelled();
+      }
+    });
+  }
+}
 
 // Event-Listener für die Buttons
 downloadBtn.addEventListener('click', startDownload);
 cancelBtn.addEventListener('click', cancelDownload);
-
-// Höre auf Nachrichten vom Background-Script
-chrome.runtime.onMessage.addListener((request) => {
-  if (request.action === 'updateProgress') {
-    updateProgress(request.progress, request.message, request.logEntry);
-  } else if (request.action === 'downloadComplete') {
-    if (request.success && request.data) {
-      startFileDownload(request.filename, request.data);
-    } else {
-      downloadComplete(request.success, request.message);
-    }
-  } else if (request.action === 'downloadCancelled') {
-    downloadCancelled();
-  }
-});
 
 // Starte den Download
 async function startDownload() {
@@ -57,14 +65,14 @@ async function startDownload() {
 
   if (!url.includes('fanfiction.net')) {
     showStatus('Bitte gib eine gültige FanFiction.net-URL ein.', 'error');
-    logMessage('Fehler: Ungültige URL', 'error');
+    logMessage('Fehler: Ungültige URL (muss fanfiction.net enthalten)', 'error');
     return;
   }
 
   // UI zurücksetzen
   resetUI();
-  showStatus('Starte Download...', 'info');
-  logMessage(`Download gestartet für: ${url}`, 'info');
+  showStatus('Starte EPUB-Download...', 'info');
+  logMessage(`EPUB-Erstellung gestartet für: ${url}`, 'info');
   
   downloadBtn.disabled = true;
   cancelBtn.disabled = false;
@@ -99,21 +107,39 @@ function cancelDownload() {
   }
 }
 
-// Starte den Download mit Base64-Daten (PDF)
-function startFileDownload(filename, base64Data) {
-  const dataUrl = `data:application/pdf;base64,${base64Data}`;
-  
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  
-  downloadComplete(true, `PDF gespeichert als: ${filename}`);
-  
-  // Popup automatisch schließen
-  setTimeout(() => window.close(), 1500);
+// Starte den Download mit Base64-Daten (EPUB)
+function startFileDownload(filename, base64Data, mimeType = 'application/epub+zip') {
+  try {
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+
+    downloadComplete(true, `EPUB gespeichert: ${filename}`);
+  } catch (err) {
+    // Fallback direct Data URI
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    downloadComplete(true, `EPUB gespeichert: ${filename}`);
+  }
 }
 
 // Aktualisiere den Fortschritt

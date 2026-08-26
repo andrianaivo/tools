@@ -1,23 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-  <title>ff-downloader</title>
+  <meta charset="UTF-8">
+  <title>ff-downloader - FanFiction to EPUB</title>
   <link rel="stylesheet" href="popup.css">
   <script type="module" src="popup.js"></script>
 </head>
 <body>
   <div class="container">
-    <h1>ff-downloader</h1>
-    <p class="version">Version: <span id="version"></span></p>
+    <div class="header-row">
+      <h1>ff-downloader</h1>
+      <span class="badge">EPUB 3</span>
+    </div>
+    <p class="subtitle">FanFiction.net → Apple Books</p>
+    <p class="version">Version: <span id="version">1.1.0</span></p>
+
     <div class="form-group">
       <label for="storyUrl">FanFiction.net-URL:</label>
       <input type="text" id="storyUrl" placeholder="https://www.fanfiction.net/s/12345/1/Story-Titel">
     </div>
-    <button id="downloadBtn">PDF herunterladen</button>
-    <button id="cancelBtn" disabled>Abbrechen</button>
+
+    <button id="downloadBtn" class="primary-btn">
+      <span class="btn-icon">📚</span>
+      <span>EPUB Buch herunterladen</span>
+    </button>
+    <button id="cancelBtn" disabled class="secondary-btn">Abbrechen</button>
+    
     <div id="status" class="status"></div>
+    
     <div class="log-container">
       <div id="log" class="log"></div>
+    </div>
+
+    <div class="apple-books-hint">
+      <span>📖</span>
+      <span>Direkt kompatibel mit <strong>Apple Books</strong> auf Mac, iPhone &amp; iPad.</span>
     </div>
   </div>
 </body>

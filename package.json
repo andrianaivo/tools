@@ -1,0 +1,16 @@
+{
+  "name": "ff-downloader",
+  "version": "1.0.2",
+  "description": "Download FanFiction.net stories as PDF/HTML files",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node -e \"console.log('Build completed successfully')\"",
+    "lint": "node --check server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "jszip": "^3.10.1"
+  }
+}

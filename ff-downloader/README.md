@@ -1,105 +1,32 @@
-# ff-downloader
+# ff-downloader: FanFiction.net to EPUB (Apple Books)
 
-Eine Chrome-Erweiterung, die FanFiction.net-Stories als **PDF-Dateien** herunterlädt.
+Ein Chrome Browser-Extension-Tool zum automatischen Herunterladen von kompletten Geschichten von [FanFiction.net](https://www.fanfiction.net) als vollwertiges **EPUB 3** E-Book, speziell optimiert für **Apple Books** (iPhone, iPad, Mac) sowie alle gängigen E-Reader.
 
----
+## 📖 Funktionsweise
 
-## 📥 Installation
+1. **URL-Eingabe:** Als Basis dient eine FanFiction.net-URL im Format:  
+   `https://www.fanfiction.net/s/<story_id>/<chapter_nr>/<story_title>`  
+   *(z.B. `https://www.fanfiction.net/s/14579114/4/The-Escrow-of-Blood`)*
+2. **Inkrementelle Kapitelsuche:**  
+   Die Extension startet automatisch bei Kapitel 1 (`https://www.fanfiction.net/s/<story_id>/1/<story_title>`) und inkrementiert die Kapitelnummer schrittweise (`/1/`, `/2/`, `/3/`, ...), bis FanFiction.net meldet, dass kein weiteres Kapitel mehr existiert.
+3. **EPUB 3 Buch-Erstellung:**  
+   Alle Kapitel werden bereinigt und zu einem vollständigen EPUB 3 Archiv mit:
+   - Titelblatt mit Metadaten (Story-ID, Autor, Datum)
+   - Interaktivem Inhaltsverzeichnis (`nav.xhtml` & `toc.ncx`)
+   - Sauberen XHTML-Kapiteln mit lesefreundlicher Buch-Typografie
+   - Dunkelmodus- und Hellmodus-Unterstützung für Apple Books
+4. **Download:**  
+   Die fertige Datei wird als `<Story-Titel>.epub` auf deinen Rechner heruntergeladen.
 
-1. Öffne **Google Chrome**.
-2. Gehe zu:
-   ```
-   chrome://extensions/
-   ```
-3. Aktiviere den **Entwicklermodus** (Schalter oben rechts).
-4. Klicke auf **"Entpackte Erweiterung laden"**.
-5. Wähle den Ordner `ff-downloader` aus.
+## 🍎 Öffnen in Apple Books
 
----
+- **Auf dem Mac:** Einfach doppelt auf die heruntergeladene `.epub`-Datei klicken. Sie wird automatisch in die *Apple Books* Mediathek importiert.
+- **Auf iPhone & iPad:** Sende die `.epub`-Datei via AirDrop an dein Gerät oder speichere sie in iCloud Drive / Dateien und öffne sie mit Apple Books.
 
-## 🚀 Verwendung
+## 🚀 Installation als Chrome Extension
 
-1. Gehe zu einer FanFiction.net-Story (z. B. [https://www.fanfiction.net/s/6959397/7/Rescued](https://www.fanfiction.net/s/6959397/7/Rescued)).
-2. Klicke auf das **Erweiterungs-Symbol** in der Chrome-Leiste.
-3. Die URL wird **automatisch eingefüllt** (falls du auf einer FanFiction.net-Seite bist).
-4. Klicke auf **"PDF herunterladen"**.
-5. Der Fortschritt wird im **Log-Bereich** angezeigt.
-6. Die **HTML-Datei** wird heruntergeladen und das Popup schließt sich.
-7. **Konvertiere die HTML-Datei in PDF**:
-   - Öffne die heruntergeladene `.html`-Datei in Chrome.
-   - Drücke **`Strg+P`** (oder **Cmd+P** auf macOS).
-   - Wähle **"Als PDF speichern"** aus.
-
----
-
-## 📌 Funktionen
-
-- **Automatische URL-Erkennung**: Die URL wird automatisch aus dem aktuellen Tab übernommen.
-- **Inkrementelle Kapitel-Suche**: Findet alle Kapitel durch Inkrementieren der Kapitelnummer.
-- **Fortschrittsanzeige**: Zeigt den aktuellen Stand im Log-Bereich an.
-- **Automatisches Schließen**: Das Popup schließt sich nach erfolgreichem Download.
-- **Fehlerbehandlung**: Zeigt Fehler an, falls etwas schiefgeht.
-
----
-
-## 📁 Projektstruktur
-
-```
-ff-downloader/
-├── manifest.json          # Erweiterungs-Konfiguration
-├── README.md              # Diese Datei
-├── popup/
-│   ├── popup.html         # Benutzeroberfläche
-│   ├── popup.css          # Stile
-│   └── popup.js           # UI-Logik
-└── background/
-    └── background.js      # Hintergrund-Script
-```
-
----
-
-## 🔧 Technische Details
-
-### Berechtigungen
-- `activeTab`: Zugriff auf den aktuellen Tab.
-- `scripting`: Zum Injizieren von Content Scripts.
-- `downloads`: Zum Herunterladen der ePub-Datei.
-- `storage`: Zum Speichern von Einstellungen.
-- `tabs`: Zum Ändern der Tab-URL.
-- `host_permissions` für `fanfiction.net`: Zugriff auf FanFiction.net.
-
-### PDF-Inhalt
-Die erstellte HTML-Datei (für PDF-Konvertierung) enthält:
-- Eine **kombinierte HTML-Datei** mit allen Kapiteln.
-- **Stile für bessere Lesbarkeit** (Schriftart, Seitenumbrüche, etc.).
-- **Hinweis zur PDF-Konvertierung** (Anleitung im Dokument).
-
----
-
-## ⚠️ Einschränkungen
-
-- **Maximale Kapitelanzahl**: 100 (Sicherheitsabbruch).
-- **Maximale Dateigröße**: 5 MB (für den direkten Download).
-- **Cloudflare-Challenges**: Falls FanFiction.net eine Challenge anzeigt, musst du sie manuell lösen.
-
----
-
-## 🐛 Fehlerbehebung
-
-### Problem: URL wird nicht automatisch eingefüllt
-- **Lösung**: Stelle sicher, dass du auf einer **FanFiction.net-Seite** bist.
-- **Lösung**: Lade die Erweiterung neu (`chrome://extensions/` → Neu laden).
-
-### Problem: Download startet nicht
-- **Lösung**: Prüfe die **Log-Nachrichten** im Popup.
-- **Lösung**: Stelle sicher, dass die **URL korrekt** ist.
-
-### Problem: PDF-Konvertierung funktioniert nicht
-- **Lösung**: Öffne die `.html`-Datei in **Chrome** und drucke sie als PDF (Strg+P → Als PDF speichern).
-- **Lösung**: Verwende einen **PDF-Drucker** wie Adobe Acrobat oder einen Online-Konverter.
-
----
-
-## 📜 Lizenz
-
-Dieses Projekt ist **Open Source** und kann frei verwendet, modifiziert und weitergegeben werden.
+1. Öffne Chrome und navigiere zu `chrome://extensions/`.
+2. Aktiviere oben rechts den **Entwicklermodus** (*Developer mode*).
+3. Klicke auf **"Entpackte Erweiterung laden"** (*Load unpacked*).
+4. Wähle den Ordner `ff-downloader` aus.
+5. Klicke auf das Extension-Icon in der Browser-Leiste, gib deine URL ein und klicke auf **"EPUB Buch herunterladen"**.
