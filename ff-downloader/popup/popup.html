@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ff-downloader</title>
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>ff-downloader</h1>
+    <p class="version">Version: <span id="version"></span></p>
+    <div class="form-group">
+      <label for="storyUrl">FanFiction.net-URL:</label>
+      <input type="text" id="storyUrl" placeholder="https://www.fanfiction.net/s/12345/1/Story-Titel">
+    </div>
+    <button id="downloadBtn">PDF herunterladen</button>
+    <button id="cancelBtn" disabled>Abbrechen</button>
+    <div id="status" class="status"></div>
+    <div class="log-container">
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+</body>
+</html>

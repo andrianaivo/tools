@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "ff-downloader",
+  "version": "1.0.2",
+  "description": "Lädt FanFiction.net-Stories als ePub-Datei herunter.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.fanfiction.net/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html"
+  }
+}
