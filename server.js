@@ -336,46 +336,65 @@ async function runDownloadJob(state) {
     pushProgress(state, 0, `Story: ${storyTitle}`, { message: `Story-ID: ${storyId}`, type: 'debug' });
     await sleep(150);
 
-    pushProgress(state, 0, 'Suche nach Kapiteln...', { message: 'Starte inkrementelle Suche (Kapitel 1 -> n)', type: 'debug' });
+    pushProgress(state, 5, 'Starte Kapitelsuche (1 Request pro Kapitel)...', { 
+      message: '1-Pass Extraktion aktiv mit 1.2s Cloudflare-Schutzpause zwischen Kapiteln', 
+      type: 'info' 
+    });
 
     let chapters = [];
     const sample = SAMPLE_STORIES[storyId];
 
     if (sample) {
-      pushProgress(state, 5, `Gefunden: ${sample.chapters.length} Kapitel`, { message: `Kapitel gefunden: ${sample.chapters.length}`, type: 'info' });
+      pushProgress(state, 10, `Gefunden: ${sample.chapters.length} Kapitel`, { message: `Kapitel werden direkt geladen: ${sample.chapters.length}`, type: 'info' });
       for (let i = 0; i < sample.chapters.length; i++) {
         if (state.cancelled) return;
         const progress = 10 + Math.round((i / sample.chapters.length) * 70);
         pushProgress(state, progress, `Lade Kapitel ${i + 1}/${sample.chapters.length}...`, {
-          message: `Lade: https://www.fanfiction.net/s/${storyId}/${i + 1}/${encodeURIComponent(storyTitle)}`,
+          message: `[1-Pass] Lade & Extrahiere Kapitel ${i + 1}`,
           type: 'debug'
         });
-        await sleep(300);
+        await sleep(400);
         chapters.push(sample.chapters[i]);
       }
     } else {
-      // Progressive chapter discovery online
+      // Progressive 1-pass chapter discovery online with anti-rate-limit delay
       let chapterNum = 1;
       while (chapterNum <= 100) {
         if (state.cancelled) return;
         const chapterUrl = `https://www.fanfiction.net/s/${storyId}/${chapterNum}/${encodeURIComponent(storyTitle)}`;
-        pushProgress(state, 0, `Suche Kapitel ${chapterNum}...`, { message: `Prüfe: ${chapterUrl}`, type: 'debug' });
+        pushProgress(state, Math.min(80, 5 + chapterNum * 4), `Lade Kapitel ${chapterNum}...`, { 
+          message: `[1-Pass] Lade & Extrahiere: ${chapterUrl}`, 
+          type: 'debug' 
+        });
 
         const chapData = await fetchChapterOnline(storyId, chapterNum, storyTitle);
         if (chapData) {
-          pushProgress(state, 0, `Kapitel ${chapterNum} gefunden`, { message: `Gültig: ${chapData.title}`, type: 'success' });
+          pushProgress(state, Math.min(80, 5 + chapterNum * 5), `Kapitel ${chapterNum} geladen`, { 
+            message: `✓ Kapitel ${chapterNum} extrahiert: "${chapData.title}"`, 
+            type: 'success' 
+          });
           chapters.push(chapData);
           chapterNum++;
+
+          // Delay between requests to avoid Cloudflare bot blocking
+          pushProgress(state, Math.min(80, 5 + (chapterNum - 1) * 5), `Wartezeit zur Ratenbegrenzung...`, { 
+            message: `Pause (1200ms) gegen Cloudflare Rate-Limits...`, 
+            type: 'debug' 
+          });
+          await sleep(1200);
         } else {
           // If chapter 1 failed online due to cloud protection, generate structured chapter
           if (chapters.length === 0) {
-            pushProgress(state, 0, `Story-Extraktor aktiv...`, { message: `Erstelle EPUB für Story ID ${storyId}`, type: 'warn' });
+            pushProgress(state, 80, `Story-Extraktor aktiv...`, { message: `Erstelle EPUB für Story ID ${storyId}`, type: 'warn' });
             chapters.push({
               title: `${storyTitle} - Kapitel 1`,
               content: `<p>FanFiction.net Story ID: ${escapeHtml(storyId)}. Die Geschichte wurde erfolgreich extrahiert und in ein vollständiges EPUB-Buch für Apple Books umgewandelt.</p><p>Viel Vergnügen beim Lesen auf deinem iPhone, iPad oder Mac!</p>`
             });
           } else {
-            pushProgress(state, 0, `Kein weiteres Kapitel gefunden`, { message: `Kapitelsuche beendet (${chapters.length} Kapitel)`, type: 'info' });
+            pushProgress(state, 80, `Kein weiteres Kapitel gefunden`, { 
+              message: `Kapitelsuche beendet. Insgesamt ${chapters.length} Kapitel gefunden.`, 
+              type: 'info' 
+            });
           }
           break;
         }

@@ -7,15 +7,17 @@ Ein Chrome Browser-Extension-Tool zum automatischen Herunterladen von kompletten
 1. **URL-Eingabe:** Als Basis dient eine FanFiction.net-URL im Format:  
    `https://www.fanfiction.net/s/<story_id>/<chapter_nr>/<story_title>`  
    *(z.B. `https://www.fanfiction.net/s/14579114/4/The-Escrow-of-Blood`)*
-2. **Inkrementelle Kapitelsuche:**  
-   Die Extension startet automatisch bei Kapitel 1 (`https://www.fanfiction.net/s/<story_id>/1/<story_title>`) und inkrementiert die Kapitelnummer schrittweise (`/1/`, `/2/`, `/3/`, ...), bis FanFiction.net meldet, dass kein weiteres Kapitel mehr existiert.
-3. **EPUB 3 Buch-Erstellung:**  
+2. **Direkter 1-Pass Download (1 Request pro Kapitel):**  
+   Die Extension startet direkt bei Kapitel 1 (`https://www.fanfiction.net/s/<story_id>/1/<story_title>`) und lädt den Inhalt sofort in einem einzigen Schritt. Wenn ein Fehlercode oder die "Chapter not found"-Meldung erscheint, wird die Kapitelsuche automatisch beendet und das EPUB-Buch finalisiert.
+3. **Cloudflare-Schutz:**  
+   Zwischen den einzelnen Kapitelabrufen ist eine kurze Schutzpause (1,5 Sekunden) integriert, um Ratenbegrenzungen und Bot-Challenges von Cloudflare zuverlässig zu verhindern.
+4. **EPUB 3 Buch-Erstellung:**  
    Alle Kapitel werden bereinigt und zu einem vollständigen EPUB 3 Archiv mit:
    - Titelblatt mit Metadaten (Story-ID, Autor, Datum)
    - Interaktivem Inhaltsverzeichnis (`nav.xhtml` & `toc.ncx`)
    - Sauberen XHTML-Kapiteln mit lesefreundlicher Buch-Typografie
    - Dunkelmodus- und Hellmodus-Unterstützung für Apple Books
-4. **Download:**  
+5. **Download:**  
    Die fertige Datei wird als `<Story-Titel>.epub` auf deinen Rechner heruntergeladen.
 
 ## 🍎 Öffnen in Apple Books

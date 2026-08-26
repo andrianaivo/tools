@@ -1,7 +1,8 @@
 import JSZip from './jszip.js';
 import { generateEpub } from './epubGenerator.js';
 
-// Globale Variablen
+// Globale Konfiguration
+const DELAY_BETWEEN_CHAPTERS_MS = 1500; // 1,5 Sekunden Pause zwischen Kapiteln gegen Cloudflare-Sperren
 let currentDownload = null;
 let cancelRequested = false;
 let downloadIdCounter = 0;
@@ -22,7 +23,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Starte den Download-Prozess
+// Starte den optimierten 1-Pass Download-Prozess
 async function startDownload(url, downloadId, initialSendResponse) {
   currentDownload = { id: downloadId };
   cancelRequested = false;
@@ -39,44 +40,90 @@ async function startDownload(url, downloadId, initialSendResponse) {
       throw new Error('Ungültige FanFiction.net-URL');
     }
 
-    sendProgress(0, `Verarbeite: ${storyTitle}`, { message: `Story-ID: ${storyId}`, type: 'debug' });
+    sendProgress(0, `Story: ${storyTitle}`, { message: `Story-ID: ${storyId}`, type: 'debug' });
 
-    // Lade alle Kapitel-URLs durch inkrementelle Suche
-    sendProgress(0, 'Suche nach Kapiteln...', { message: 'Starte inkrementelle Suche', type: 'debug' });
-    const chapterUrls = await getAllChapterUrls(storyId, storyTitle);
-    
-    if (!chapterUrls.length) {
-      throw new Error('Keine Kapitel gefunden');
-    }
-
-    sendProgress(5, `Gefunden: ${chapterUrls.length} Kapitel`, { message: `Kapitel gefunden: ${chapterUrls.length}`, type: 'info' });
-
-    // Lade alle Kapitel herunter
     const chapters = [];
-    for (let i = 0; i < chapterUrls.length; i++) {
+    let chapterNum = 1;
+
+    sendProgress(5, 'Starte Kapitelsuche (1 Request pro Kapitel)...', { 
+      message: `Starte direkt bei Kapitel 1 mit ${DELAY_BETWEEN_CHAPTERS_MS}ms Schutzpause zwischen Anfragen`, 
+      type: 'info' 
+    });
+
+    // Inkrementelle Schleife mit nur 1 Abruf pro Kapitel
+    while (true) {
       if (cancelRequested) {
         throw new Error('Download abgebrochen');
       }
 
-      const progress = 10 + Math.round((i / chapterUrls.length) * 70);
-      const chapterUrl = chapterUrls[i];
-      sendProgress(progress, `Lade Kapitel ${i + 1}/${chapterUrls.length}...`, {
-        message: `Lade: ${chapterUrl}`,
-        type: 'debug'
+      const chapterUrl = `https://www.fanfiction.net/s/${storyId}/${chapterNum}/${encodeURIComponent(storyTitle)}`;
+      sendProgress(
+        Math.min(85, 5 + chapterNum * 3), 
+        `Lade Kapitel ${chapterNum}...`, 
+        { message: `[1-Pass] Lade & Extrahiere: ${chapterUrl}`, type: 'debug' }
+      );
+
+      // Direkter Lade- und Extraktionsversuch
+      const result = await loadAndExtractChapter(chapterUrl);
+
+      if (result.notFound) {
+        // Fehlerseite oder Kapitel existiert nicht -> Story ist zu Ende
+        if (chapters.length === 0) {
+          throw new Error(`Kapitel 1 konnte nicht geladen werden (${result.reason || 'Nicht gefunden'}). Bitte prüfe die Story-URL.`);
+        }
+
+        sendProgress(85, `Kapitelsuche abgeschlossen`, { 
+          message: `Kein Kapitel ${chapterNum} mehr vorhanden (${result.reason || 'Ende der Story'}). Insgesamt ${chapters.length} Kapitel gefunden.`, 
+          type: 'info' 
+        });
+        break;
+      }
+
+      // Kapitel erfolgreich gelesen
+      chapters.push({
+        title: result.title || `Kapitel ${chapterNum}`,
+        content: result.content,
+        url: chapterUrl
       });
 
-      const { title, content } = await extractChapterContent(chapterUrl);
-      chapters.push({ title, content, url: chapterUrl });
+      sendProgress(
+        Math.min(85, 5 + chapterNum * 5),
+        `Kapitel ${chapterNum} geladen`,
+        { message: `✓ Kapitel ${chapterNum} gespeichert: "${result.title || 'Kapitel ' + chapterNum}"`, type: 'success' }
+      );
+
+      chapterNum++;
+
+      // Sicherheitsbegrenzung
+      if (chapterNum > 300) {
+        sendProgress(85, 'Maximale Kapitelanzahl erreicht', { message: 'Abbruch nach 300 Kapiteln', type: 'warn' });
+        break;
+      }
+
+      // Kurze Verzögerung zur Vermeidung von Cloudflare Rate Limits / Bot-Blockaden
+      if (DELAY_BETWEEN_CHAPTERS_MS > 0) {
+        sendProgress(
+          Math.min(85, 5 + (chapterNum - 1) * 5),
+          `Warte kurz vor Kapitel ${chapterNum} (Cloudflare-Schutz)...`,
+          { message: `Pause (${DELAY_BETWEEN_CHAPTERS_MS}ms) gegen Cloudflare Rate-Limits...`, type: 'debug' }
+        );
+        await sleep(DELAY_BETWEEN_CHAPTERS_MS);
+      }
+    }
+
+    if (cancelRequested) {
+      throw new Error('Download abgebrochen');
     }
 
     // Erstelle das EPUB Buch für Apple Books
-    sendProgress(85, 'Erstelle EPUB-Buch für Apple Books...', { message: 'EPUB3-Archiv wird generiert & optimiert', type: 'info' });
+    sendProgress(90, 'Erstelle EPUB-Buch für Apple Books...', { message: 'Generiere EPUB3-Archiv mit Inhaltsverzeichnis & Apple Books-Formatierung', type: 'info' });
     const filename = `${sanitizeFilename(storyTitle)}.epub`;
     
     const epubBytes = await generateEpub(JSZip, storyId, storyTitle, chapters);
     const base64Data = arrayBufferToBase64(epubBytes);
 
-    sendProgress(100, 'EPUB bereit!', { message: `EPUB Buch fertig: ${filename}`, type: 'success' });
+    sendProgress(100, 'EPUB bereit!', { message: `EPUB Buch erfolgreich erstellt (${chapters.length} Kapitel): ${filename}`, type: 'success' });
+    
     chrome.runtime.sendMessage({
       action: 'downloadComplete',
       success: true,
@@ -133,42 +180,8 @@ function parseUrl(url) {
   }
 }
 
-// Lade alle Kapitel-URLs durch inkrementelle Suche
-async function getAllChapterUrls(storyId, storyTitle) {
-  const chapterUrls = [];
-  let chapterNum = 1;
-
-  while (true) {
-    if (cancelRequested) {
-      break;
-    }
-
-    const chapterUrl = `https://www.fanfiction.net/s/${storyId}/${chapterNum}/${encodeURIComponent(storyTitle)}`;
-    sendProgress(0, `Suche Kapitel ${chapterNum}...`, { message: `Prüfe: ${chapterUrl}`, type: 'debug' });
-
-    const chapterExists = await checkChapterExists(chapterUrl);
-
-    if (chapterExists) {
-      chapterUrls.push(chapterUrl);
-      sendProgress(0, `Kapitel ${chapterNum} gefunden`, { message: `Gültig: ${chapterUrl}`, type: 'success' });
-      chapterNum++;
-    } else {
-      sendProgress(0, `Kein Kapitel ${chapterNum} gefunden`, { message: 'Suche beendet', type: 'info' });
-      break;
-    }
-
-    // Sicherheitsabbruch nach 250 Kapiteln
-    if (chapterNum > 250) {
-      sendProgress(0, 'Maximale Kapitelanzahl erreicht', { message: 'Abbruch nach 250 Kapiteln', type: 'warn' });
-      break;
-    }
-  }
-
-  return chapterUrls.length > 0 ? chapterUrls : [`https://www.fanfiction.net/s/${storyId}/1/${encodeURIComponent(storyTitle)}`];
-}
-
-// Prüfe, ob ein Kapitel existiert
-async function checkChapterExists(url) {
+// Direkte Lade- und Extraktionsfunktion (1 einzelner Tab-Request)
+async function loadAndExtractChapter(url) {
   try {
     const tab = await getActiveTab();
     await chrome.tabs.update(tab.id, { url: url });
@@ -177,29 +190,66 @@ async function checkChapterExists(url) {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
+        // 1. Prüfe auf Fehlermeldungen ("Chapter not found" / "Story Not Found")
         const errorMessage = document.querySelector('.panel_normal');
         if (errorMessage && (errorMessage.innerHTML.includes('Chapter not found') || errorMessage.innerHTML.includes('Story Not Found'))) {
-          return false;
+          return { notFound: true, reason: 'Chapter/Story Not Found in panel_normal' };
         }
 
-        const storyText = document.getElementById('storytext') || 
-                         document.querySelector('.storytext') ||
-                         document.getElementById('story');
-        if (storyText) {
-          return true;
+        if (document.title && (document.title.includes('Chapter not found') || document.title.includes('Story Not Found'))) {
+          return { notFound: true, reason: 'Titel signalisiert Kapitel-Ende' };
         }
 
-        if (document.title && !document.title.includes('Chapter not found') && !document.title.includes('Story Not Found')) {
-          return true;
+        // 2. Prüfe auf Cloudflare Challenge Page
+        if (document.title && document.title.includes('Just a moment...') && document.querySelector('#challenge-running')) {
+          return { notFound: true, reason: 'Cloudflare Sicherheitsabfrage aktiv. Bitte im Tab bestätigen.' };
         }
 
-        return false;
+        // 3. Suche den Storytext
+        let storyText = document.getElementById('storytext');
+        if (!storyText) storyText = document.querySelector('.storytext');
+        if (!storyText) storyText = document.getElementById('story');
+        if (!storyText) storyText = document.querySelector('div[class*="story" i]');
+
+        if (!storyText) {
+          // Kein Storytext auffindbar -> Kapitel existiert nicht
+          return { notFound: true, reason: 'Kein Story-Text Element gefunden' };
+        }
+
+        let title = document.title.replace(' - FanFiction', '').trim();
+        const clone = storyText.cloneNode(true);
+        
+        // Unerwünschte Tags entfernen
+        clone.querySelectorAll('script, style, iframe, noscript, form, input, select, button').forEach(el => el.remove());
+        clone.querySelectorAll('div').forEach(div => {
+          const classList = Array.from(div.classList || []);
+          const id = div.id || '';
+          if (classList.some(c => ['ads', 'advertisement', 'banner', 'ad-container'].includes(c.toLowerCase())) ||
+              ['ads', 'advertisement', 'banner', 'ad-container'].includes(id.toLowerCase())) {
+            div.remove();
+          }
+        });
+
+        const content = clone.innerHTML;
+        if (!content || content.trim().length === 0) {
+          return { notFound: true, reason: 'Leerer Kapitel-Inhalt' };
+        }
+
+        return {
+          notFound: false,
+          title: title || '',
+          content: content
+        };
       }
     });
 
-    return results[0]?.result === true;
+    if (results && results[0] && results[0].result) {
+      return results[0].result;
+    }
+
+    return { notFound: true, reason: 'Kein Ergebnis vom Content-Script' };
   } catch (error) {
-    return false;
+    return { notFound: true, reason: error.message };
   }
 }
 
@@ -219,63 +269,17 @@ function waitForTabLoad(tabId, url) {
           resolve();
         }
       });
-    }, 500);
+    }, 400);
 
     setTimeout(() => {
       clearInterval(checkInterval);
-      reject(new Error('Timeout beim Laden der Seite'));
+      reject(new Error('Timeout beim Laden der Seite (30s)'));
     }, 30000);
   });
 }
 
-// Lade den Inhalt eines Kapitels
-async function extractChapterContent(url) {
-  try {
-    const tab = await getActiveTab();
-    await chrome.tabs.update(tab.id, { url: url });
-    await waitForTabLoad(tab.id, url);
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        let title = document.title.replace(' - FanFiction', '').trim();
-        let content = '';
-
-        let storyText = document.getElementById('storytext');
-        if (!storyText) storyText = document.querySelector('.storytext');
-        if (!storyText) storyText = document.getElementById('story');
-        if (!storyText) storyText = document.querySelector('div[class*="story" i]');
-
-        if (storyText) {
-          const clone = storyText.cloneNode(true);
-          clone.querySelectorAll('script, style, iframe, noscript, form, input, select, button').forEach(el => el.remove());
-          clone.querySelectorAll('div').forEach(div => {
-            const classList = Array.from(div.classList || []);
-            const id = div.id || '';
-            if (classList.some(c => ['ads', 'advertisement', 'banner', 'ad-container'].includes(c.toLowerCase())) ||
-                ['ads', 'advertisement', 'banner', 'ad-container'].includes(id.toLowerCase())) {
-              div.remove();
-            }
-          });
-          content = clone.innerHTML;
-        } else {
-          const bodyClone = document.body.cloneNode(true);
-          bodyClone.querySelectorAll('script, style, iframe, noscript, form, input, select, button, header, footer, nav').forEach(el => el.remove());
-          content = bodyClone.innerHTML;
-        }
-
-        return { title, content };
-      }
-    });
-
-    if (results[0]?.result) {
-      return results[0].result;
-    }
-
-    return { title: '', content: '<p>Fehler beim Laden des Kapitels</p>' };
-  } catch (error) {
-    return { title: '', content: `<p>Fehler: ${error.message}</p>` };
-  }
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Hilfsfunktion: Konvertiere Uint8Array zu Base64
